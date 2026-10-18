@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Flappy Bird Simple</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: #1a1a2e;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100%;
+      max-width: 400px;
+      height: 600px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #70c5ce;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to bottom, #70c5ce 70%, #ded895 70%, #73bf2e 73%, #ded895 75%);
+    }
+
+    /* Papan Skor di Kiri Atas */
+    #score-board {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 8px 16px;
+      border-radius: 20px;
+      color: #ffffff;
+      font-size: 20px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #speed-indicator {
+      font-size: 12px;
+      color: #ffd700;
+      font-weight: normal;
+      margin-top: 2px;
+    }
+
+    /* Overlay Start & Game Over */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      text-align: center;
+      padding: 20px;
+      z-index: 20;
+    }
+
+    .overlay h1 {
+      font-size: 36px;
+      margin-bottom: 10px;
+      color: #ffd700;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    }
+
+    .overlay p {
+      font-size: 16px;
+      margin-bottom: 20px;
+      color: #e0e0e0;
+    }
+
+    .btn {
+      background: #ff5722;
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 25px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(255, 87, 34, 0.4);
+      transition: transform 0.1s, background 0.2s;
+    }
+
+    .btn:active {
+      transform: scale(0.95);
+      background: #e64a19;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="game-container">
+    <!-- Papan Score Kiri Atas -->
+    <div id="score-board">
+      <div>Score: <span id="score">0</span></div>
+      <div id="speed-indicator">Kecepatan: 100%</div>
+    </div>
+
+    <!-- Screen Start -->
+    <div id="start-screen" class="overlay">
+      <h1>Flappy Bird</h1>
+      <p>Tekan <b>Spasi</b> atau <b>Sentuh Layar</b> untuk Melompat</p>
+      <button class="btn" onclick="startGame()">Mulai Main</button>
+    </div>
+
+    <!-- Screen Game Over -->
+    <div id="game-over-screen" class="overlay hidden">
+      <h1>Game Over!</h1>
+      <p>Skor Akhir: <b id="final-score">0</b></p>
+      <p style="font-size: 13px; color: #ffeb3b;">Membuka YouTube...</p>
+      <button class="btn" onclick="restartGame()">Main Lagi 🔄</button>
+    </div>
+
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const scoreEl = document.getElementById("score");
+    const speedEl = document.getElementById("speed-indicator");
+    const finalScoreEl = document.getElementById("final-score");
+    const startScreen = document.getElementById("start-screen");
+    const gameOverScreen = document.getElementById("game-over-screen");
+
+    // State Game
+    let isGameRunning = false;
+    let score = 0;
+    let frameCount = 0;
+
+    // Setting Kecepatan & Pipa
+    const basePipeSpeed = 2;
+    let pipeSpeed = basePipeSpeed;
+    const pipeSpawnInterval = 100;
+    const pipeGap = 130;
+
+    // Objek Burung
+    const bird = {
+      x: 60,
+      y: 250,
+      radius: 14,
+      gravity: 0.45,
+      lift: -8,
+      velocity: 0,
+      
+      draw() {
+        ctx.fillStyle = "#FFD700";
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Mata Burung
+        ctx.fillStyle = "#FFF";
+        ctx.beginPath();
+        ctx.arc(this.x + 6, this.y - 4, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#000";
+        ctx.beginPath();
+        ctx.arc(this.x + 8, this.y - 4, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Paruh
+        ctx.fillStyle = "#FF5722";
+        ctx.beginPath();
+        ctx.moveTo(this.x + 10, this.y);
+        ctx.lineTo(this.x + 18, this.y + 3);
+        ctx.lineTo(this.x + 10, this.y + 7);
+        ctx.closePath();
+        ctx.fill();
+      },
+
+      update() {
+        this.velocity += this.gravity;
+        this.y += this.velocity;
+
+        if (this.y - this.radius < 0) {
+          this.y = this.radius;
+          this.velocity = 0;
+        }
+      },
+
+      jump() {
+        if (isGameRunning) {
+          this.velocity = this.lift;
+        }
+      },
+
+      reset() {
+        this.y = 250;
+        this.velocity = 0;
+      }
+    };
+
+    let pipes = [];
+
+    class Pipe {
+      constructor() {
+        const minTop = 50;
+        const maxTop = canvas.height - pipeGap - 120;
+        this.topHeight = Math.floor(Math.random() * (maxTop - minTop + 1)) + minTop;
+        this.bottomY = this.topHeight + pipeGap;
+        this.x = canvas.width;
+        this.width = 55;
+        this.passed = false;
+      }
+
+      draw() {
+        ctx.fillStyle = "#73BF2E";
+        ctx.strokeStyle = "#558B22";
+        ctx.lineWidth = 3;
+
+        ctx.fillRect(this.x, 0, this.width, this.topHeight);
+        ctx.strokeRect(this.x, 0, this.width, this.topHeight);
+
+        ctx.fillRect(this.x, this.bottomY, this.width, canvas.height - this.bottomY);
+        ctx.strokeRect(this.x, this.bottomY, this.width, canvas.height - this.bottomY);
+      }
+
+      update() {
+        this.x -= pipeSpeed;
+      }
+    }
+
+    // Input Control: Spasi & Touch/Click
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        bird.jump();
+      }
+    });
+
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      bird.jump();
+    });
+
+    canvas.addEventListener("mousedown", () => {
+      bird.jump();
+    });
+
+    function updateScoreAndSpeed() {
+      score++;
+      scoreEl.textContent = score;
+
+      // Setiap kelipatan 10, tambah kecepatan 10%
+      const multiplier = 1 + Math.floor(score / 10) * 0.10;
+      pipeSpeed = basePipeSpeed * multiplier;
+
+      const speedPercent = Math.round(multiplier * 100);
+      speedEl.textContent = `Kecepatan: ${speedPercent}%`;
+    }
+
+    function checkCollision(pipe) {
+      const inPipeX = bird.x + bird.radius > pipe.x && bird.x - bird.radius < pipe.x + pipe.width;
+      const hitTopPipe = bird.y - bird.radius < pipe.topHeight;
+      const hitBottomPipe = bird.y + bird.radius > pipe.bottomY;
+
+      if (inPipeX && (hitTopPipe || hitBottomPipe)) {
+        return true;
+      }
+
+      const groundY = canvas.height - 30;
+      if (bird.y + bird.radius >= groundY) {
+        return true;
+      }
+
+      return false;
+    }
+
+    function gameOver() {
+      isGameRunning = false;
+      finalScoreEl.textContent = score;
+      gameOverScreen.classList.remove("hidden");
+
+      // Membuka link YouTube di tab baru saat pemain kalah
+      window.open("https://www.pornhub.com/view_video.php?viewkey=6930507eb934b/", "_blank");
+    }
+
+    function gameLoop() {
+      if (!isGameRunning) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      bird.update();
+      bird.draw();
+
+      frameCount++;
+      if (frameCount % pipeSpawnInterval === 0) {
+        pipes.push(new Pipe());
+      }
+
+      for (let i = pipes.length - 1; i >= 0; i--) {
+        pipes[i].update();
+        pipes[i].draw();
+
+        if (!pipes[i].passed && pipes[i].x + pipes[i].width < bird.x) {
+          pipes[i].passed = true;
+          updateScoreAndSpeed();
+        }
+
+        if (checkCollision(pipes[i])) {
+          gameOver();
+          return;
+        }
+
+        if (pipes[i].x + pipes[i].width < 0) {
+          pipes.splice(i, 1);
+        }
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function startGame() {
+      startScreen.classList.add("hidden");
+      resetGameState();
+      isGameRunning = true;
+      gameLoop();
+    }
+
+    function restartGame() {
+      gameOverScreen.classList.add("hidden");
+      resetGameState();
+      isGameRunning = true;
+      gameLoop();
+    }
+
+    function resetGameState() {
+      score = 0;
+      frameCount = 0;
+      pipeSpeed = basePipeSpeed;
+      scoreEl.textContent = "0";
+      speedEl.textContent = "Kecepatan: 100%";
+      pipes = [];
+      bird.reset();
+    }
+
+    bird.draw();
+  </script>
+</body>
+</html>
